@@ -72,6 +72,13 @@ GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o eggduino-linux   ./cmd/eg
 
 ## Hardware
 
+For the frame, you can 3D print one of these designs (both include full hardware/BOM lists):
+
+- [Sphere-O-Bot](https://www.thingiverse.com/thing:3512980) -- the original design
+- [OKMI EggBot Remix](https://www.printables.com/model/203407-okmi-eggbot-remix) -- a cleaner remix with easier assembly
+
+Electronics:
+
 - Arduino Uno (or compatible)
 - CNC Shield v3
 - 2x stepper drivers (DRV8825 or A4988)
