@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+
+      - name: Generate version from commit count
+        id: version
+        run: |
+          COUNT=$(git rev-list --count HEAD)
+          SHA=$(git rev-parse --short HEAD)
+          VERSION="0.${COUNT}.0"
+          TAG="v${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Check if tag exists
+        id: check
+        run: |
+          if git tag -l "${{ steps.version.outputs.tag }}" | grep -q .; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build binaries
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          cp eggduino-web.html cmd/eggduino/eggduino-web.html
+          LDFLAGS="-s -w -X main.Version=${{ steps.version.outputs.version }}"
+
+          GOOS=linux   GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/eggduino-linux-amd64       ./cmd/eggduino/
+          GOOS=linux   GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/eggduino-linux-arm64       ./cmd/eggduino/
+          GOOS=darwin  GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/eggduino-macos-amd64       ./cmd/eggduino/
+          GOOS=darwin  GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/eggduino-macos-arm64       ./cmd/eggduino/
+          GOOS=windows GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/eggduino-windows-amd64.exe ./cmd/eggduino/
+
+      - name: Create release
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --title "EggDuino ${{ steps.version.outputs.version }}" \
+            --generate-notes \
+            dist/*

@@ -16,6 +16,8 @@ import (
 	"go.bug.st/serial"
 )
 
+var Version = "dev"
+
 //go:embed eggduino-web.html
 var htmlFS embed.FS
 
@@ -316,7 +318,7 @@ func main() {
 	url := "http://" + addr
 	arduino := findArduino()
 
-	fmt.Println("EggDuino")
+	fmt.Printf("EggDuino %s\n", Version)
 	fmt.Printf("  Web UI:  %s\n", url)
 	if arduino != "" {
 		fmt.Printf("  Arduino: %s\n", arduino)
