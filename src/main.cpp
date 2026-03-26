@@ -132,6 +132,7 @@ void queryPen();
 void queryButton();
 void unrecognized(const char *command);
 void setprgButtonState();
+void queryDebug();
 
 // ==========================================================================
 // Setup & Loop
@@ -179,6 +180,7 @@ void makeComInterface() {
   SCmd.addCommand("QL", queryLayer);
   SCmd.addCommand("QP", queryPen);
   SCmd.addCommand("QB", queryButton);
+  SCmd.addCommand("QD", queryDebug);
   SCmd.setDefaultHandler(unrecognized);
 }
 
@@ -444,11 +446,13 @@ void sendError() {
 void motorsOff() {
   digitalWrite(ENABLE_PIN, HIGH);  // CNC Shield: HIGH = disabled
   motorsEnabled = 0;
+  Serial.print("DBG motors OFF\r\n");
 }
 
 void motorsOn() {
   digitalWrite(ENABLE_PIN, LOW);   // CNC Shield: LOW = enabled
   motorsEnabled = 1;
+  Serial.print("DBG motors ON\r\n");
 }
 
 void toggleMotors() {
@@ -483,6 +487,16 @@ void prepareMove(uint16_t duration, int penStepsEBB, int rotStepsEBB) {
   if (!motorsEnabled) {
     motorsOn();
   }
+
+  Serial.print("DBG SM dur=");
+  Serial.print(duration);
+  Serial.print(" pen=");
+  Serial.print(penStepsEBB);
+  Serial.print(" rot=");
+  Serial.print(rotStepsEBB);
+  Serial.print(" penPos=");
+  Serial.print(penMotor.currentPosition());
+  Serial.print("\r\n");
 
   if ((rotStepCorrection == 1) && (penStepCorrection == 1)) {
     // Coordinate systems are identical (16x microstepping)
@@ -528,4 +542,27 @@ void moveToDestination() {
 
 void setprgButtonState() {
   prgButtonState = 1;
+}
+
+void queryDebug() {
+  Serial.print("DBG motors=");
+  Serial.print(motorsEnabled ? "ON" : "OFF");
+  Serial.print(" enablePin=");
+  Serial.print(digitalRead(ENABLE_PIN) == LOW ? "LOW(on)" : "HIGH(off)");
+  Serial.print(" penUp=");
+  Serial.print(penUpPos);
+  Serial.print(" penDown=");
+  Serial.print(penDownPos);
+  Serial.print(" penState=");
+  Serial.print(penState);
+  Serial.print(" rotTarget=");
+  Serial.print(rotMotor.distanceToGo());
+  Serial.print(" penTarget=");
+  Serial.print(penMotor.distanceToGo());
+  Serial.print(" rotPos=");
+  Serial.print(rotMotor.currentPosition());
+  Serial.print(" penPos=");
+  Serial.print(penMotor.currentPosition());
+  Serial.print("\r\n");
+  sendAck();
 }
