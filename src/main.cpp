@@ -48,6 +48,11 @@
 #define ROT_MICROSTEP 16
 #define PEN_MICROSTEP 16
 
+// ---- Pen axis travel limits (steps from zero) ----
+// Set to 0 to disable limits
+#define PEN_LIMIT_NEG -300
+#define PEN_LIMIT_POS  400
+
 // ---- EEPROM addresses for pen servo positions ----
 #define PEN_UP_EE_ADDR   ((uint16_t *)0)
 #define PEN_DOWN_EE_ADDR ((uint16_t *)2)
@@ -491,6 +496,20 @@ void prepareMove(uint16_t duration, int penStepsEBB, int rotStepsEBB) {
   if (!motorsEnabled) {
     motorsOn();
   }
+
+  // Clamp pen axis to physical limits
+  #if PEN_LIMIT_NEG != 0 || PEN_LIMIT_POS != 0
+  {
+    long targetPos = penMotor.currentPosition() + (long)penStepsEBB;
+    if (targetPos < PEN_LIMIT_NEG) {
+      penStepsEBB = PEN_LIMIT_NEG - penMotor.currentPosition();
+      Serial.print("DBG PEN CLAMPED to neg limit\r\n");
+    } else if (targetPos > PEN_LIMIT_POS) {
+      penStepsEBB = PEN_LIMIT_POS - penMotor.currentPosition();
+      Serial.print("DBG PEN CLAMPED to pos limit\r\n");
+    }
+  }
+  #endif
 
   Serial.print("DBG SM dur=");
   Serial.print(duration);
