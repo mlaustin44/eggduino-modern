@@ -133,6 +133,8 @@ void queryButton();
 void unrecognized(const char *command);
 void setprgButtonState();
 void queryDebug();
+void setHome();
+void goHome();
 
 // ==========================================================================
 // Setup & Loop
@@ -181,6 +183,8 @@ void makeComInterface() {
   SCmd.addCommand("QP", queryPen);
   SCmd.addCommand("QB", queryButton);
   SCmd.addCommand("QD", queryDebug);
+  SCmd.addCommand("HM", setHome);   // Set current position as zero
+  SCmd.addCommand("GH", goHome);    // Return to zero position
   SCmd.setDefaultHandler(unrecognized);
 }
 
@@ -542,6 +546,24 @@ void moveToDestination() {
 
 void setprgButtonState() {
   prgButtonState = 1;
+}
+
+void setHome() {
+  moveToDestination();
+  rotMotor.setCurrentPosition(0);
+  penMotor.setCurrentPosition(0);
+  sendAck();
+}
+
+void goHome() {
+  if (!motorsEnabled) motorsOn();
+  // Move back to 0,0 at a moderate speed
+  rotMotor.moveTo(0);
+  rotMotor.setSpeed(abs(rotMotor.distanceToGo()) > 0 ? 400.0 : 0);
+  penMotor.moveTo(0);
+  penMotor.setSpeed(abs(penMotor.distanceToGo()) > 0 ? 400.0 : 0);
+  moveToDestination();
+  sendAck();
 }
 
 void queryDebug() {
