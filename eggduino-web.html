@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EggDuino Web</title>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+header { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 1rem; background: #1e293b; border-bottom: 1px solid #334155; flex-shrink: 0; }
+header h1 { font-size: 1.1rem; font-weight: 600; color: #f8fafc; }
+header .right { display: flex; align-items: center; gap: 0.75rem; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: #475569; display: inline-block; }
+.status-dot.on { background: #10b981; }
+.version { font-size: 0.75rem; color: #64748b; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+main { display: grid; grid-template-columns: 1fr 320px; flex: 1; min-height: 0; }
+
+.preview-pane { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 1rem; background: #0f172a; position: relative; overflow: hidden; }
+.preview-wrap { width: 100%; max-width: 900px; border: 1px solid #334155; border-radius: 8px; position: relative; overflow: hidden; cursor: grab; }
+.preview-wrap:active { cursor: grabbing; }
+.preview-wrap svg { width: 100%; height: 100%; }
+.preview-wrap img { width: 100%; height: 100%; }
+.drop-zone { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #64748b; font-size: 0.9rem; cursor: pointer; }
+.drop-zone.dragover { background: rgba(59,130,246,0.1); border: 2px dashed #3b82f6; }
+.plot-dot { position: absolute; width: 8px; height: 8px; background: #ef4444; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; box-shadow: 0 0 6px #ef4444; transition: left 0.05s linear, top 0.05s linear; z-index: 10; }
+.preview-info { margin-top: 0.5rem; font-size: 0.75rem; color: #64748b; }
+
+.panel { background: #1e293b; border-left: 1px solid #334155; display: flex; flex-direction: column; overflow: hidden; }
+.tabs { display: flex; border-bottom: 1px solid #334155; flex-shrink: 0; }
+.tabs button { flex: 1; padding: 0.5rem; background: none; border: none; color: #94a3b8; font-size: 0.8rem; cursor: pointer; border-bottom: 2px solid transparent; }
+.tabs button.active { color: #e2e8f0; border-bottom-color: #3b82f6; }
+.tab-body { flex: 1; overflow-y: auto; padding: 0.75rem; }
+
+.field { margin-bottom: 0.75rem; }
+.field label { display: flex; justify-content: space-between; font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.25rem; }
+.field label span.val { color: #cbd5e1; font-variant-numeric: tabular-nums; }
+.field input[type=range] { width: 100%; accent-color: #3b82f6; }
+.field input[type=number] { width: 100%; background: #0f172a; border: 1px solid #334155; color: #e2e8f0; padding: 0.3rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
+.field-row { display: flex; gap: 0.5rem; }
+.field-row .field { flex: 1; }
+.section-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin: 0.75rem 0 0.5rem; padding-bottom: 0.25rem; border-bottom: 1px solid #1e293b; }
+.checkbox-field { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+.checkbox-field label { font-size: 0.8rem; color: #94a3b8; cursor: pointer; }
+.checkbox-field input { accent-color: #3b82f6; }
+
+.manual-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; margin-bottom: 0.75rem; }
+
+.log-area { font-family: 'SF Mono', 'Cascadia Code', monospace; font-size: 0.7rem; background: #0f172a; border: 1px solid #334155; border-radius: 4px; padding: 0.5rem; height: 100%; overflow-y: auto; white-space: pre-wrap; word-break: break-all; color: #94a3b8; line-height: 1.4; }
+.log-area .tx { color: #3b82f6; }
+.log-area .rx { color: #10b981; }
+.log-area .err { color: #ef4444; }
+
+footer { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: #1e293b; border-top: 1px solid #334155; flex-shrink: 0; }
+.progress-bar { flex: 1; height: 6px; background: #334155; border-radius: 3px; overflow: hidden; }
+.progress-bar .fill { height: 100%; background: #3b82f6; transition: width 0.2s; border-radius: 3px; }
+.progress-text { font-size: 0.75rem; color: #94a3b8; min-width: 3rem; text-align: right; font-variant-numeric: tabular-nums; }
+
+button { background: #334155; color: #e2e8f0; border: none; padding: 0.35rem 0.75rem; border-radius: 4px; font-size: 0.8rem; cursor: pointer; white-space: nowrap; }
+button:hover { background: #475569; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+button.primary { background: #3b82f6; }
+button.primary:hover { background: #2563eb; }
+button.danger { background: #dc2626; }
+button.danger:hover { background: #b91c1c; }
+button.success { background: #059669; }
+button.success:hover { background: #047857; }
+button.sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
+</style>
+</head>
+<body>
+
+<div x-data="eggduino()" @dragover.prevent="dragover=true" @dragleave.prevent="dragover=false" @drop.prevent="handleDrop($event)" style="display:contents">
+
+<!-- Header -->
+<header>
+  <h1>EggDuino Web</h1>
+  <div class="right">
+    <span class="version" x-text="version"></span>
+    <span class="status-dot" :class="{on: connected}"></span>
+    <button @click="connected ? disconnect() : connect()" :class="connected ? '' : 'primary'" x-text="connected ? 'Disconnect' : 'Connect'" :disabled="connecting"></button>
+  </div>
+</header>
+
+<!-- Main -->
+<main>
+  <!-- Preview -->
+  <div class="preview-pane">
+    <div class="preview-wrap" :style="'background:'+previewBg+';aspect-ratio:'+scaledW+'/'+scaledH"
+         @wheel.prevent="onZoom($event)"
+         @mousedown.prevent="onPanStart($event)"
+         @mousemove.prevent="onPanMove($event)"
+         @mouseup.prevent="onPanEnd()"
+         @mouseleave="onPanEnd()">
+      <div style="width:100%;height:100%;position:relative"
+           :style="'transform:scale('+zoom+') translate('+panX+'px,'+panY+'px); transform-origin:center'">
+        <img x-show="svgUrl" :src="svgUrl" :style="'background:'+previewBg" style="width:100%;height:100%">
+        <div class="plot-dot" x-show="plotting" :style="'left:'+dotX+'%;top:'+dotY+'%'"></div>
+      </div>
+      <div class="drop-zone" x-show="!svgUrl" :class="{dragover}" @click="$refs.fileInput.click()">
+        <div style="font-size:2rem;margin-bottom:0.5rem">&#x1F95A;</div>
+        <div>Drop SVG here or click to browse</div>
+        <div style="margin-top:0.25rem;font-size:0.75rem">3200 &times; 700 recommended</div>
+      </div>
+    </div>
+    <input type="file" accept=".svg" x-ref="fileInput" @change="loadFile($event)" hidden>
+    <div class="preview-info" x-show="pathCount > 0">
+      <span x-text="pathCount + ' paths, ' + segmentCount + ' segments'"></span>
+      <span x-show="fileName" x-text="' — ' + fileName"></span>
+    </div>
+  </div>
+
+  <!-- Panel -->
+  <div class="panel">
+    <div class="tabs">
+      <button @click="tab='settings'" :class="{active: tab==='settings'}">Settings</button>
+      <button @click="tab='manual'" :class="{active: tab==='manual'}">Manual</button>
+      <button @click="tab='log'" :class="{active: tab==='log'}">Log</button>
+    </div>
+    <div class="tab-body" x-show="tab==='settings'">
+      <div class="section-title">Pen Servo</div>
+      <div class="field-row">
+        <div class="field">
+          <label>Up position <span class="val" x-text="s.penUpDeg + '°'"></span></label>
+          <input type="range" min="0" max="180" x-model.number="s.penUpDeg">
+        </div>
+        <div class="field">
+          <label>Down position <span class="val" x-text="s.penDownDeg + '°'"></span></label>
+          <input type="range" min="0" max="180" x-model.number="s.penDownDeg">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Up delay (ms)</label>
+          <input type="number" min="50" max="5000" step="50" x-model.number="s.penUpDelay">
+        </div>
+        <div class="field">
+          <label>Down delay (ms)</label>
+          <input type="number" min="50" max="5000" step="50" x-model.number="s.penDownDelay">
+        </div>
+      </div>
+
+      <div class="section-title">Speed</div>
+      <div class="field-row">
+        <div class="field">
+          <label>Draw <span class="val" x-text="s.drawSpeed"></span></label>
+          <input type="range" min="50" max="2000" step="10" x-model.number="s.drawSpeed">
+        </div>
+        <div class="field">
+          <label>Travel <span class="val" x-text="s.travelSpeed"></span></label>
+          <input type="range" min="50" max="2000" step="10" x-model.number="s.travelSpeed">
+        </div>
+      </div>
+
+      <div class="section-title">Quality</div>
+      <div class="field">
+        <label>Smoothness <span class="val" x-text="s.smoothness"></span></label>
+        <input type="range" min="0.1" max="5" step="0.1" x-model.number="s.smoothness">
+      </div>
+
+      <div class="section-title">Options</div>
+      <div class="checkbox-field">
+        <input type="checkbox" id="revPen" x-model="s.reversePen">
+        <label for="revPen">Reverse pen motor</label>
+      </div>
+      <div class="checkbox-field">
+        <input type="checkbox" id="revRot" x-model="s.reverseRot">
+        <label for="revRot">Reverse rotation motor</label>
+      </div>
+
+      <div class="section-title">Page (steps)</div>
+      <div class="field-row">
+        <div class="field">
+          <label>Width</label>
+          <input type="number" min="100" max="10000" x-model.number="s.pageWidth">
+        </div>
+        <div class="field">
+          <label>Height</label>
+          <input type="number" min="100" max="10000" x-model.number="s.pageHeight">
+        </div>
+      </div>
+
+      <div class="section-title">Preview</div>
+      <div class="field">
+        <label>Background color</label>
+        <div style="display:flex;gap:0.5rem;align-items:center">
+          <input type="color" x-model="previewBg" style="width:2rem;height:1.5rem;border:none;padding:0;cursor:pointer">
+          <input type="text" x-model="previewBg" style="flex:1;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:0.3rem 0.5rem;border-radius:4px;font-size:0.75rem;font-family:monospace">
+          <button class="sm" @click="zoom=1;panX=0;panY=0">Reset zoom</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-body" x-show="tab==='manual'">
+      <div class="section-title">Pen</div>
+      <div class="manual-grid">
+        <button @click="manualPenUp()" :disabled="!connected">Pen Up</button>
+        <button @click="manualPenDown()" :disabled="!connected">Pen Down</button>
+      </div>
+
+      <div class="section-title">Motors</div>
+      <div class="manual-grid">
+        <button @click="manualMotors(true)" :disabled="!connected" class="success sm">Enable</button>
+        <button @click="manualMotors(false)" :disabled="!connected" class="sm">Disable</button>
+      </div>
+
+      <div class="section-title">Jog</div>
+      <div class="field">
+        <label>Step size <span class="val" x-text="jogSteps"></span></label>
+        <input type="range" min="10" max="500" step="10" x-model.number="jogSteps">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.3rem;max-width:200px;margin:0 auto">
+        <div></div>
+        <button @click="jog(0,-1)" :disabled="!connected" class="sm">&uarr; Y</button>
+        <div></div>
+        <button @click="jog(-1,0)" :disabled="!connected" class="sm">&larr; X</button>
+        <div></div>
+        <button @click="jog(1,0)" :disabled="!connected" class="sm">X &rarr;</button>
+        <div></div>
+        <button @click="jog(0,1)" :disabled="!connected" class="sm">Y &darr;</button>
+        <div></div>
+      </div>
+
+      <div class="section-title" style="margin-top:1rem">Home / Zero</div>
+      <div class="manual-grid">
+        <button @click="setHome()" :disabled="!connected" class="primary sm">Set Zero Here</button>
+        <button @click="goHome()" :disabled="!connected" class="sm">Return to Zero</button>
+      </div>
+      <div x-show="connected" style="font-size:0.7rem;color:#64748b;margin-top:0.25rem">
+        Jog to starting position, then click "Set Zero Here"
+      </div>
+
+      <div class="section-title" style="margin-top:1rem">Configure Servo</div>
+      <button @click="sendServoConfig()" :disabled="!connected" class="sm">Send pen positions to board</button>
+
+      <div class="section-title" style="margin-top:1rem">Debug</div>
+      <button @click="queryDebug()" :disabled="!connected" class="sm">Query State</button>
+    </div>
+
+    <div class="tab-body" x-show="tab==='log'" style="padding:0.5rem;display:flex;flex-direction:column;">
+      <div class="log-area" x-ref="logArea" x-html="logHtml"></div>
+    </div>
+  </div>
+</main>
+
+<!-- Footer -->
+<footer>
+  <button @click="$refs.fileInput.click()">Load SVG</button>
+  <template x-if="!plotting">
+    <button class="primary" @click="startPlot()" :disabled="!canPlot">Plot</button>
+  </template>
+  <template x-if="plotting && !paused">
+    <button @click="paused=true">Pause</button>
+  </template>
+  <template x-if="plotting && paused">
+    <button class="success" @click="paused=false">Resume</button>
+  </template>
+  <template x-if="plotting">
+    <button class="danger" @click="stopPlot()">Stop</button>
+  </template>
+  <div class="progress-bar"><div class="fill" :style="'width:'+progress+'%'"></div></div>
+  <div class="progress-text" x-text="plotting ? Math.round(progress)+'%' : ''"></div>
+</footer>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+//  SVG PATH TOKENIZER & PARSER
+// ═══════════════════════════════════════════════════════════════════
+
+function tokenizePath(d) {
+  const tokens = [];
+  let i = 0;
+  while (i < d.length) {
+    const c = d[i];
+    if ('MmZzLlHhVvCcSsQqTtAa'.includes(c)) {
+      tokens.push(c);
+      i++;
+    } else if (c === ',' || c === ' ' || c === '\t' || c === '\n' || c === '\r') {
+      i++;
+    } else if (c === '-' || c === '+' || c === '.' || (c >= '0' && c <= '9')) {
+      let s = '';
+      if (c === '-' || c === '+') { s += c; i++; }
+      let hasDot = false;
+      while (i < d.length) {
+        const ch = d[i];
+        if (ch >= '0' && ch <= '9') { s += ch; i++; }
+        else if (ch === '.' && !hasDot) { hasDot = true; s += ch; i++; }
+        else break;
+      }
+      if (i < d.length && (d[i] === 'e' || d[i] === 'E')) {
+        s += d[i]; i++;
+        if (i < d.length && (d[i] === '+' || d[i] === '-')) { s += d[i]; i++; }
+        while (i < d.length && d[i] >= '0' && d[i] <= '9') { s += d[i]; i++; }
+      }
+      tokens.push(parseFloat(s));
+    } else {
+      i++;
+    }
+  }
+  return tokens;
+}
+
+const ARG_COUNTS = {M:2,m:2,L:2,l:2,H:1,h:1,V:1,v:1,C:6,c:6,S:4,s:4,Q:4,q:4,T:2,t:2,A:7,a:7,Z:0,z:0};
+
+function* iterCommands(tokens) {
+  let i = 0, cmd = null;
+  while (i < tokens.length) {
+    const t = tokens[i];
+    if (typeof t === 'string') {
+      cmd = t;
+      i++;
+      if (cmd === 'Z' || cmd === 'z') { yield {cmd, args: []}; cmd = null; continue; }
+    }
+    if (cmd === null) { i++; continue; }
+    const n = ARG_COUNTS[cmd];
+    if (i + n > tokens.length) break;
+    const args = [];
+    for (let j = 0; j < n; j++) {
+      let v = tokens[i + j];
+      if (typeof v === 'string') break;
+      // Arc flag handling: flags at positions 3,4 must be 0 or 1
+      if ((cmd === 'A' || cmd === 'a') && (j === 3 || j === 4) && v > 1) {
+        const s = String(tokens[i + j]);
+        v = parseInt(s[0]);
+        tokens.splice(i + j + 1, 0, parseFloat(s.substring(1)));
+      }
+      args.push(v);
+    }
+    if (args.length < n) break;
+    i += n;
+    yield {cmd, args};
+    // Implicit repetition: M→L, m→l
+    if (cmd === 'M') cmd = 'L';
+    else if (cmd === 'm') cmd = 'l';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  BEZIER & ARC FLATTENING
+// ═══════════════════════════════════════════════════════════════════
+
+function flattenCubic(p0, p1, p2, p3, tol, out) {
+  const dx = p3.x - p0.x, dy = p3.y - p0.y;
+  const d = Math.abs((p1.x - p3.x) * dy - (p1.y - p3.y) * dx) +
+            Math.abs((p2.x - p3.x) * dy - (p2.y - p3.y) * dx);
+  if (d * d <= tol * tol * (dx * dx + dy * dy) * 4) {
+    out.push({x: p3.x, y: p3.y});
+    return;
+  }
+  const m01 = mid(p0, p1), m12 = mid(p1, p2), m23 = mid(p2, p3);
+  const m012 = mid(m01, m12), m123 = mid(m12, m23);
+  const m0123 = mid(m012, m123);
+  flattenCubic(p0, m01, m012, m0123, tol, out);
+  flattenCubic(m0123, m123, m23, p3, tol, out);
+}
+
+function flattenQuad(p0, p1, p2, tol, out) {
+  // Convert to cubic: C = Q0, Q0+2/3*(Q1-Q0), Q2+2/3*(Q1-Q2), Q2
+  flattenCubic(p0,
+    {x: p0.x + 2/3*(p1.x-p0.x), y: p0.y + 2/3*(p1.y-p0.y)},
+    {x: p2.x + 2/3*(p1.x-p2.x), y: p2.y + 2/3*(p1.y-p2.y)},
+    p2, tol, out);
+}
+
+function mid(a, b) { return {x: (a.x+b.x)/2, y: (a.y+b.y)/2}; }
+
+// Arc endpoint→center conversion (W3C SVG spec F.6.5-6)
+function arcToPoints(x1, y1, rx, ry, phi, fA, fS, x2, y2, tol, out) {
+  if (x1 === x2 && y1 === y2) return;
+  rx = Math.abs(rx); ry = Math.abs(ry);
+  if (rx === 0 || ry === 0) { out.push({x: x2, y: y2}); return; }
+
+  const cosPhi = Math.cos(phi), sinPhi = Math.sin(phi);
+  const dx2 = (x1 - x2) / 2, dy2 = (y1 - y2) / 2;
+  const x1p = cosPhi * dx2 + sinPhi * dy2;
+  const y1p = -sinPhi * dx2 + cosPhi * dy2;
+
+  let lam = (x1p*x1p)/(rx*rx) + (y1p*y1p)/(ry*ry);
+  if (lam > 1) { const s = Math.sqrt(lam); rx *= s; ry *= s; }
+
+  const num = Math.max(0, rx*rx*ry*ry - rx*rx*y1p*y1p - ry*ry*x1p*x1p);
+  const den = rx*rx*y1p*y1p + ry*ry*x1p*x1p;
+  const sq = Math.sqrt(num / den) * (fA === fS ? -1 : 1);
+  const cxp = sq * rx * y1p / ry;
+  const cyp = sq * -ry * x1p / rx;
+
+  const cx = cosPhi * cxp - sinPhi * cyp + (x1 + x2) / 2;
+  const cy = sinPhi * cxp + cosPhi * cyp + (y1 + y2) / 2;
+
+  const theta1 = vecAngle(1, 0, (x1p - cxp) / rx, (y1p - cyp) / ry);
+  let dtheta = vecAngle((x1p - cxp) / rx, (y1p - cyp) / ry, (-x1p - cxp) / rx, (-y1p - cyp) / ry);
+  if (!fS && dtheta > 0) dtheta -= 2 * Math.PI;
+  if (fS && dtheta < 0) dtheta += 2 * Math.PI;
+
+  const nSeg = Math.max(4, Math.ceil(Math.abs(dtheta) / (Math.PI / 4) * (Math.max(rx, ry) / tol)));
+  for (let i = 1; i <= nSeg; i++) {
+    const t = theta1 + dtheta * i / nSeg;
+    const ex = rx * Math.cos(t), ey = ry * Math.sin(t);
+    out.push({
+      x: cosPhi * ex - sinPhi * ey + cx,
+      y: sinPhi * ex + cosPhi * ey + cy
+    });
+  }
+}
+
+function vecAngle(ux, uy, vx, vy) {
+  const dot = ux*vx + uy*vy;
+  const len = Math.sqrt((ux*ux+uy*uy)*(vx*vx+vy*vy));
+  let a = Math.acos(Math.max(-1, Math.min(1, dot / len)));
+  if (ux*vy - uy*vx < 0) a = -a;
+  return a;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  SVG PATH → POLYLINES
+// ═══════════════════════════════════════════════════════════════════
+
+function pathToPolylines(d, tol) {
+  const tokens = tokenizePath(d);
+  const polys = [];
+  let cur = [];
+  let cx = 0, cy = 0, sx = 0, sy = 0;
+  let lastCx = 0, lastCy = 0; // last control point for S/T
+  let lastCmd = '';
+
+  for (const {cmd, args} of iterCommands(tokens)) {
+    const a = args;
+    switch (cmd) {
+      case 'M':
+        if (cur.length > 1) polys.push(cur);
+        cx = a[0]; cy = a[1]; sx = cx; sy = cy;
+        cur = [{x: cx, y: cy}];
+        break;
+      case 'm':
+        if (cur.length > 1) polys.push(cur);
+        cx += a[0]; cy += a[1]; sx = cx; sy = cy;
+        cur = [{x: cx, y: cy}];
+        break;
+      case 'L': cx = a[0]; cy = a[1]; cur.push({x:cx,y:cy}); break;
+      case 'l': cx += a[0]; cy += a[1]; cur.push({x:cx,y:cy}); break;
+      case 'H': cx = a[0]; cur.push({x:cx,y:cy}); break;
+      case 'h': cx += a[0]; cur.push({x:cx,y:cy}); break;
+      case 'V': cy = a[0]; cur.push({x:cx,y:cy}); break;
+      case 'v': cy += a[0]; cur.push({x:cx,y:cy}); break;
+      case 'C':
+        flattenCubic({x:cx,y:cy},{x:a[0],y:a[1]},{x:a[2],y:a[3]},{x:a[4],y:a[5]},tol,cur);
+        lastCx=a[2]; lastCy=a[3]; cx=a[4]; cy=a[5]; break;
+      case 'c':
+        flattenCubic({x:cx,y:cy},{x:cx+a[0],y:cy+a[1]},{x:cx+a[2],y:cy+a[3]},{x:cx+a[4],y:cy+a[5]},tol,cur);
+        lastCx=cx+a[2]; lastCy=cy+a[3]; cx+=a[4]; cy+=a[5]; break;
+      case 'S': {
+        const rx = (lastCmd==='C'||lastCmd==='c'||lastCmd==='S'||lastCmd==='s') ? 2*cx-lastCx : cx;
+        const ry = (lastCmd==='C'||lastCmd==='c'||lastCmd==='S'||lastCmd==='s') ? 2*cy-lastCy : cy;
+        flattenCubic({x:cx,y:cy},{x:rx,y:ry},{x:a[0],y:a[1]},{x:a[2],y:a[3]},tol,cur);
+        lastCx=a[0]; lastCy=a[1]; cx=a[2]; cy=a[3]; break;
+      }
+      case 's': {
+        const rx = (lastCmd==='C'||lastCmd==='c'||lastCmd==='S'||lastCmd==='s') ? 2*cx-lastCx : cx;
+        const ry = (lastCmd==='C'||lastCmd==='c'||lastCmd==='S'||lastCmd==='s') ? 2*cy-lastCy : cy;
+        flattenCubic({x:cx,y:cy},{x:rx,y:ry},{x:cx+a[0],y:cy+a[1]},{x:cx+a[2],y:cy+a[3]},tol,cur);
+        lastCx=cx+a[0]; lastCy=cy+a[1]; cx+=a[2]; cy+=a[3]; break;
+      }
+      case 'Q':
+        flattenQuad({x:cx,y:cy},{x:a[0],y:a[1]},{x:a[2],y:a[3]},tol,cur);
+        lastCx=a[0]; lastCy=a[1]; cx=a[2]; cy=a[3]; break;
+      case 'q':
+        flattenQuad({x:cx,y:cy},{x:cx+a[0],y:cy+a[1]},{x:cx+a[2],y:cy+a[3]},tol,cur);
+        lastCx=cx+a[0]; lastCy=cy+a[1]; cx+=a[2]; cy+=a[3]; break;
+      case 'T': {
+        const rx = (lastCmd==='Q'||lastCmd==='q'||lastCmd==='T'||lastCmd==='t') ? 2*cx-lastCx : cx;
+        const ry = (lastCmd==='Q'||lastCmd==='q'||lastCmd==='T'||lastCmd==='t') ? 2*cy-lastCy : cy;
+        flattenQuad({x:cx,y:cy},{x:rx,y:ry},{x:a[0],y:a[1]},tol,cur);
+        lastCx=rx; lastCy=ry; cx=a[0]; cy=a[1]; break;
+      }
+      case 't': {
+        const rx = (lastCmd==='Q'||lastCmd==='q'||lastCmd==='T'||lastCmd==='t') ? 2*cx-lastCx : cx;
+        const ry = (lastCmd==='Q'||lastCmd==='q'||lastCmd==='T'||lastCmd==='t') ? 2*cy-lastCy : cy;
+        flattenQuad({x:cx,y:cy},{x:rx,y:ry},{x:cx+a[0],y:cy+a[1]},tol,cur);
+        lastCx=rx; lastCy=ry; cx+=a[0]; cy+=a[1]; break;
+      }
+      case 'A':
+        arcToPoints(cx,cy,a[0],a[1],a[2]*Math.PI/180,a[3],a[4],a[5],a[6],tol,cur);
+        cx=a[5]; cy=a[6]; break;
+      case 'a':
+        arcToPoints(cx,cy,a[0],a[1],a[2]*Math.PI/180,a[3],a[4],cx+a[5],cy+a[6],tol,cur);
+        cx+=a[5]; cy+=a[6]; break;
+      case 'Z': case 'z':
+        if (cx !== sx || cy !== sy) cur.push({x:sx, y:sy});
+        cx = sx; cy = sy;
+        if (cur.length > 1) polys.push(cur);
+        cur = [];
+        break;
+    }
+    lastCmd = cmd;
+  }
+  if (cur.length > 1) polys.push(cur);
+  return polys;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  SVG TRANSFORM PARSER
+// ═══════════════════════════════════════════════════════════════════
+
+function parseSVGTransform(str) {
+  if (!str) return new DOMMatrix();
+  let m = new DOMMatrix();
+  const re = /(translate|rotate|scale|matrix|skewX|skewY)\s*\(([^)]+)\)/gi;
+  let match;
+  while ((match = re.exec(str)) !== null) {
+    const fn = match[1].toLowerCase();
+    const a = match[2].split(/[\s,]+/).map(Number);
+    switch (fn) {
+      case 'translate': m = m.translate(a[0], a[1]||0); break;
+      case 'scale': m = m.scale(a[0], a.length>1?a[1]:a[0]); break;
+      case 'rotate':
+        if (a.length===3) m = m.translate(a[1],a[2]).rotate(a[0]).translate(-a[1],-a[2]);
+        else m = m.rotate(a[0]);
+        break;
+      case 'matrix': m = m.multiply(new DOMMatrix([a[0],a[1],a[2],a[3],a[4],a[5]])); break;
+      case 'skewx': m = m.skewX(a[0]); break;
+      case 'skewy': m = m.skewY(a[0]); break;
+    }
+  }
+  return m;
+}
+
+function getAncestorTransform(el) {
+  const chain = [];
+  let node = el;
+  while (node && node.tagName !== 'svg') {
+    chain.unshift(node);
+    node = node.parentElement;
+  }
+  let m = new DOMMatrix();
+  for (const n of chain) {
+    const t = n.getAttribute('transform');
+    if (t) m = m.multiply(parseSVGTransform(t));
+  }
+  return m;
+}
+
+function txPt(x, y, m) {
+  const p = new DOMPoint(x, y).matrixTransform(m);
+  return {x: p.x, y: p.y};
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  SVG EXTRACTION
+// ═══════════════════════════════════════════════════════════════════
+
+function extractPaths(svgText, tol) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(svgText, 'image/svg+xml');
+  const svg = doc.querySelector('svg');
+  if (!svg) return {paths: [], w: 0, h: 0};
+
+  // Determine SVG coordinate space
+  const vb = svg.getAttribute('viewBox');
+  let svgW, svgH;
+  if (vb) {
+    const parts = vb.split(/[\s,]+/).map(Number);
+    svgW = parts[2]; svgH = parts[3];
+  } else {
+    svgW = parseFloat(svg.getAttribute('width')) || 3200;
+    svgH = parseFloat(svg.getAttribute('height')) || 800;
+  }
+
+  const allPolys = [];
+
+  function walk(node) {
+    if (node.nodeType !== 1) return;
+    const display = node.getAttribute('display');
+    const visibility = node.getAttribute('visibility');
+    if (display === 'none' || visibility === 'hidden') return;
+
+    const tag = node.tagName;
+    let d = null;
+
+    if (tag === 'path') {
+      d = node.getAttribute('d');
+    } else if (tag === 'rect') {
+      const x = parseFloat(node.getAttribute('x')||0), y = parseFloat(node.getAttribute('y')||0);
+      const w = parseFloat(node.getAttribute('width')), h = parseFloat(node.getAttribute('height'));
+      if (w && h) d = `M${x},${y}L${x+w},${y}L${x+w},${y+h}L${x},${y+h}Z`;
+    } else if (tag === 'circle') {
+      const cx = parseFloat(node.getAttribute('cx')||0), cy = parseFloat(node.getAttribute('cy')||0);
+      const r = parseFloat(node.getAttribute('r'));
+      if (r) d = `M${cx-r},${cy}A${r},${r},0,1,0,${cx+r},${cy}A${r},${r},0,1,0,${cx-r},${cy}Z`;
+    } else if (tag === 'ellipse') {
+      const cx = parseFloat(node.getAttribute('cx')||0), cy = parseFloat(node.getAttribute('cy')||0);
+      const rx = parseFloat(node.getAttribute('rx')), ry = parseFloat(node.getAttribute('ry'));
+      if (rx && ry) d = `M${cx-rx},${cy}A${rx},${ry},0,1,0,${cx+rx},${cy}A${rx},${ry},0,1,0,${cx-rx},${cy}Z`;
+    } else if (tag === 'line') {
+      const x1=parseFloat(node.getAttribute('x1')||0), y1=parseFloat(node.getAttribute('y1')||0);
+      const x2=parseFloat(node.getAttribute('x2')||0), y2=parseFloat(node.getAttribute('y2')||0);
+      d = `M${x1},${y1}L${x2},${y2}`;
+    } else if (tag === 'polyline' || tag === 'polygon') {
+      const pts = node.getAttribute('points');
+      if (pts) {
+        const nums = pts.trim().split(/[\s,]+/).map(Number);
+        if (nums.length >= 4) {
+          d = 'M' + nums[0] + ',' + nums[1];
+          for (let i = 2; i < nums.length; i += 2) d += 'L' + nums[i] + ',' + nums[i+1];
+          if (tag === 'polygon') d += 'Z';
+        }
+      }
+    }
+
+    if (d) {
+      const mat = getAncestorTransform(node);
+      const polys = pathToPolylines(d, tol);
+      for (const poly of polys) {
+        const tp = poly.map(p => txPt(p.x, p.y, mat));
+        if (tp.length > 1) allPolys.push(tp);
+      }
+    }
+
+    for (const child of node.children) walk(child);
+  }
+
+  for (const child of svg.children) walk(child);
+  return {paths: allPolys, w: svgW, h: svgH};
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  EBB SERIAL — WebSocket client
+//  Talks to the Go binary's WebSocket server which handles serial.
+// ═══════════════════════════════════════════════════════════════════
+
+class EBB {
+  #ws = null;
+  #logFn = null;
+  #pending = null;
+
+  constructor(logFn) { this.#logFn = logFn || (() => {}); }
+
+  async connect() {
+    const wsUrl = `ws://${location.host}/ws`;
+    this.#ws = new WebSocket(wsUrl);
+
+    await new Promise((resolve, reject) => {
+      this.#ws.onopen = resolve;
+      this.#ws.onerror = () => reject(new Error('Cannot connect to EggDuino server'));
+      setTimeout(() => reject(new Error('WebSocket timeout')), 3000);
+    });
+
+    this.#ws.onmessage = (ev) => {
+      const msg = JSON.parse(ev.data);
+      if (this.#pending) {
+        const p = this.#pending;
+        this.#pending = null;
+        if (msg.ok) p.resolve(msg);
+        else p.reject(new Error(msg.error || 'Unknown error'));
+      }
+    };
+    this.#ws.onclose = () => {
+      if (this.#pending) {
+        const p = this.#pending;
+        this.#pending = null;
+        p.reject(new Error('Connection lost'));
+      }
+    };
+
+    const resp = await this.#request({action: 'connect'});
+    return resp.version || '';
+  }
+
+  async disconnect() {
+    try { await this.#request({action: 'disconnect'}); } catch(e) {}
+    this.#ws?.close();
+    this.#ws = null;
+  }
+
+  get isOpen() { return this.#ws?.readyState === WebSocket.OPEN; }
+
+  #request(msg) {
+    return new Promise((resolve, reject) => {
+      this.#pending = {resolve, reject};
+      this.#ws.send(JSON.stringify(msg));
+    });
+  }
+
+  async #send(cmd) {
+    this.#logFn('tx', cmd);
+    const resp = await this.#request({action: 'send', cmd});
+    for (const line of (resp.lines || [])) this.#logFn('rx', line);
+    return resp.lines || [];
+  }
+
+  async command(cmd) {
+    const lines = await this.#send(cmd);
+    const last = lines[lines.length - 1];
+    if (last !== 'OK') throw new Error(`Expected OK, got: "${last}"`);
+  }
+
+  async query(cmd) {
+    const lines = await this.#send(cmd);
+    return lines[0] || '';
+  }
+
+  async version() {
+    const lines = await this.#send('v');
+    return lines[0] || 'Unknown';
+  }
+
+  async enableMotors()  { await this.command('EM,1'); }
+  async disableMotors() { await this.command('EM,0'); }
+
+  async configServo(upDeg, downDeg) {
+    const upVal = Math.round(upDeg * 133.3 + 6000);
+    const downVal = Math.round(downDeg * 133.3 + 6000);
+    await this.command('SC,5,' + upVal);
+    await this.command('SC,4,' + downVal);
+  }
+
+  async penUp(delayMs)   { await this.command('SP,0,' + Math.round(delayMs)); }
+  async penDown(delayMs) { await this.command('SP,1,' + Math.round(delayMs)); }
+
+  async stepperMove(duration, penSteps, rotSteps) {
+    duration = Math.max(1, Math.round(duration));
+    penSteps = Math.round(penSteps);
+    rotSteps = Math.round(rotSteps);
+    await this.command(`SM,${duration},${penSteps},${rotSteps}`);
+  }
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ═══════════════════════════════════════════════════════════════════
+//  PLOTTER
+// ═══════════════════════════════════════════════════════════════════
+
+async function plot(paths, settings, scaledH, ebb, callbacks) {
+  const {onProgress, onPosition, isPaused, isStopped} = callbacks;
+  // Count total segments: drawing segments + 1 travel per path + 1 return home
+  const drawSegs = paths.reduce((s, p) => s + Math.max(0, p.length - 1), 0);
+  const totalSegs = drawSegs + paths.length + 1; // +travel per path +return home
+  let doneSeg = 0;
+  let curX = 0, curY = 0;
+  let penIsUp = true;
+
+  const revP = settings.reversePen ? -1 : 1;
+  const revR = settings.reverseRot ? -1 : 1;
+
+  async function moveTo(x, y, speed) {
+    const dx = x - curX, dy = y - curY;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 0.5) { curX = x; curY = y; onPosition(curX, curY); return; }
+    const dur = Math.max(1, Math.ceil(1000 * dist / speed));
+    // SM,duration,penSteps(Y),rotSteps(X)
+    await ebb.stepperMove(dur, Math.round(dy * revP), Math.round(dx * revR));
+    // Pace: sleep for most of the move duration to let firmware catch up
+    if (dur > 50) await sleep(dur - 50);
+    curX = x; curY = y;
+    onPosition(curX, curY);
+  }
+
+  async function doPenUp() {
+    if (!penIsUp) {
+      await ebb.penUp(settings.penUpDelay);
+      penIsUp = true;
+    }
+  }
+
+  async function doPenDown() {
+    if (penIsUp) {
+      await ebb.penDown(settings.penDownDelay);
+      penIsUp = false;
+    }
+  }
+
+  // Center the pen axis around zero.
+  // SVG coordinates go 0→pageHeight, but zero is at the center of physical travel.
+  // Offset Y by -pageHeight/2 so drawing spans -half to +half.
+  const yOffset = scaledH / 2;
+  for (const polyline of paths) {
+    for (const pt of polyline) {
+      pt.y -= yOffset;
+    }
+  }
+
+  // Configure servo positions
+  await ebb.configServo(settings.penUpDeg, settings.penDownDeg);
+  await ebb.enableMotors();
+  await doPenUp();
+
+  for (const polyline of paths) {
+    if (isStopped()) break;
+    while (isPaused()) { await sleep(100); if (isStopped()) break; }
+    if (isStopped()) break;
+
+    // Travel to start of this polyline
+    const start = polyline[0];
+    const travelDist = Math.hypot(start.x - curX, start.y - curY);
+    if (travelDist > 1) {
+      await doPenUp();
+      await moveTo(start.x, start.y, settings.travelSpeed);
+    }
+    doneSeg++;
+    onProgress(totalSegs > 0 ? (doneSeg / totalSegs) * 100 : 0);
+
+    // Draw the polyline
+    await doPenDown();
+    for (let i = 1; i < polyline.length; i++) {
+      if (isStopped()) break;
+      while (isPaused()) { await sleep(100); if (isStopped()) break; }
+      if (isStopped()) break;
+
+      await moveTo(polyline[i].x, polyline[i].y, settings.drawSpeed);
+      doneSeg++;
+      onProgress(totalSegs > 0 ? (doneSeg / totalSegs) * 100 : 100);
+    }
+  }
+
+  // Finish up
+  await doPenUp();
+  if (curX !== 0 || curY !== 0) {
+    await moveTo(0, 0, settings.travelSpeed);
+  }
+  doneSeg++;
+  onProgress(100);
+  await ebb.disableMotors();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  ALPINE.JS APPLICATION
+// ═══════════════════════════════════════════════════════════════════
+
+// EBB instance lives outside Alpine's reactive proxy to avoid
+// Proxy vs private-field conflicts
+let _ebb = null;
+
+function eggduino() {
+  return {
+    // Connection
+    connected: false,
+    connecting: false,
+    version: '',
+
+    // SVG
+    svgText: null,
+    svgUrl: null,
+    fileName: '',
+    paths: [],
+    pathCount: 0,
+    segmentCount: 0,
+    scaledW: 3200,
+    scaledH: 700,
+
+    // Settings
+    s: {
+      penUpDeg: 5,
+      penDownDeg: 20,
+      drawSpeed: 300,
+      travelSpeed: 400,
+      penUpDelay: 200,
+      penDownDelay: 400,
+      smoothness: 0.5,
+      reversePen: false,
+      reverseRot: false,
+      pageWidth: 3200,
+      pageHeight: 700,
+    },
+
+    // Plotting
+    plotting: false,
+    paused: false,
+    stopped: false,
+    progress: 0,
+    dotX: 0,
+    dotY: 0,
+    previewBg: '#1a1a2e',
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+    _panning: false,
+    _panStartX: 0,
+    _panStartY: 0,
+    _panBaseX: 0,
+    _panBaseY: 0,
+
+    // UI
+    tab: 'settings',
+    jogSteps: 100,
+    dragover: false,
+    logLines: [],
+
+    get logHtml() {
+      return this.logLines.slice(-200).map(l =>
+        `<span class="${l.type}">${l.type === 'tx' ? '→' : '←'} ${escHtml(l.text)}</span>`
+      ).join('\n');
+    },
+
+    get canPlot() {
+      return this.connected && this.paths.length > 0 && !this.plotting;
+    },
+
+    log(type, text) {
+      this.logLines.push({type, text});
+      this.$nextTick(() => {
+        const el = this.$refs.logArea;
+        if (el) el.scrollTop = el.scrollHeight;
+      });
+    },
+
+    // ── Connection ──
+
+    async connect() {
+      this.connecting = true;
+      try {
+        _ebb = new EBB((type, text) => this.log(type, text));
+        this.version = await _ebb.connect();
+        this.connected = true;
+      } catch(e) {
+        this.log('err', e.message);
+        this.connected = false;
+        try { await _ebb?.disconnect(); } catch(e2) {}
+        _ebb = null;
+      }
+      this.connecting = false;
+    },
+
+    async disconnect() {
+      if (this.plotting) this.stopPlot();
+      await _ebb?.disconnect();
+      this.connected = false;
+      _ebb = null;
+      this.version = '';
+    },
+
+    // ── SVG Loading ──
+
+    handleDrop(event) {
+      this.dragover = false;
+      const file = event.dataTransfer?.files?.[0];
+      if (file && file.name.endsWith('.svg')) this.processFile(file);
+    },
+
+    loadFile(event) {
+      const file = event.target.files[0];
+      if (file) this.processFile(file);
+      event.target.value = '';
+    },
+
+    async processFile(file) {
+      this.fileName = file.name;
+      this.svgText = await file.text();
+      if (this.svgUrl) URL.revokeObjectURL(this.svgUrl);
+      this.svgUrl = URL.createObjectURL(new Blob([this.svgText], {type: 'image/svg+xml'}));
+      this.reprocessSVG();
+    },
+
+    reprocessSVG() {
+      if (!this.svgText) return;
+      const {paths, w, h} = extractPaths(this.svgText, this.s.smoothness);
+
+      // Scale from SVG coords to egg step coords
+      const scaleX = this.s.pageWidth / w;
+      const scaleY = this.s.pageHeight / h;
+      const scale = Math.min(scaleX, scaleY);
+
+      for (const poly of paths) {
+        for (const pt of poly) {
+          pt.x *= scale;
+          pt.y *= scale;
+        }
+      }
+
+      this.paths = paths;
+      this.scaledW = w * scale;
+      this.scaledH = h * scale;
+      this.pathCount = paths.length;
+      this.segmentCount = paths.reduce((s, p) => s + Math.max(0, p.length - 1), 0);
+    },
+
+    // ── Plotting ──
+
+    async startPlot() {
+      if (!this.canPlot) return;
+      // Re-extract with current smoothness
+      this.reprocessSVG();
+
+      this.plotting = true;
+      this.paused = false;
+      this.stopped = false;
+      this.progress = 0;
+
+      try {
+        await plot(this.paths, this.s, this.scaledH, _ebb, {
+          onProgress: (p) => { this.progress = p; },
+          onPosition: (x, y) => {
+            // x = rotation steps, y = pen steps (centered, so -scaledH/2 to +scaledH/2)
+            const wrappedX = ((x % this.scaledW) + this.scaledW) % this.scaledW;
+            this.dotX = (wrappedX / this.scaledW) * 100;
+            this.dotY = ((y + this.scaledH / 2) / this.scaledH) * 100;
+          },
+          isPaused: () => this.paused,
+          isStopped: () => this.stopped,
+        });
+      } catch(e) {
+        this.log('err', 'Plot error: ' + e.message);
+      }
+
+      this.plotting = false;
+      this.paused = false;
+    },
+
+    stopPlot() {
+      this.stopped = true;
+      this.paused = false;
+    },
+
+    // ── Manual Controls ──
+
+    async manualPenUp() {
+      try {
+        await _ebb.configServo(this.s.penUpDeg, this.s.penDownDeg);
+        await _ebb.penUp(this.s.penUpDelay);
+      } catch(e) { this.log('err', e.message); }
+    },
+
+    async manualPenDown() {
+      try {
+        await _ebb.configServo(this.s.penUpDeg, this.s.penDownDeg);
+        await _ebb.penDown(this.s.penDownDelay);
+      } catch(e) { this.log('err', e.message); }
+    },
+
+    async manualMotors(on) {
+      try {
+        if (on) await _ebb.enableMotors();
+        else await _ebb.disableMotors();
+      } catch(e) { this.log('err', e.message); }
+    },
+
+    async jog(dx, dy) {
+      try {
+        await _ebb.enableMotors();
+        const steps = this.jogSteps;
+        const dur = Math.max(1, Math.ceil(1000 * steps / this.s.travelSpeed));
+        const revP = this.s.reversePen ? -1 : 1;
+        const revR = this.s.reverseRot ? -1 : 1;
+        await _ebb.stepperMove(dur, Math.round(dy * steps * revP), Math.round(dx * steps * revR));
+      } catch(e) { this.log('err', e.message); }
+    },
+
+    async sendServoConfig() {
+      try {
+        await _ebb.configServo(this.s.penUpDeg, this.s.penDownDeg);
+        this.log('rx', `Servo configured: up=${this.s.penUpDeg}° down=${this.s.penDownDeg}°`);
+      } catch(e) { this.log('err', e.message); }
+    },
+
+    async setHome() {
+      try {
+        await _ebb.command('HM');
+        this.log('rx', 'Zero position set');
+      } catch(e) { this.log('err', e.message); }
+    },
+
+    async goHome() {
+      try {
+        await _ebb.command('GH');
+        this.log('rx', 'Returned to zero');
+      } catch(e) { this.log('err', e.message); }
+    },
+
+    async queryDebug() {
+      try {
+        await _ebb.query('QD');
+      } catch(e) { this.log('err', e.message); }
+    },
+
+    onZoom(e) {
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      this.zoom = Math.max(0.5, Math.min(10, this.zoom + delta * this.zoom));
+    },
+    onPanStart(e) {
+      this._panning = true;
+      this._panStartX = e.clientX;
+      this._panStartY = e.clientY;
+      this._panBaseX = this.panX;
+      this._panBaseY = this.panY;
+    },
+    onPanMove(e) {
+      if (!this._panning) return;
+      this.panX = this._panBaseX + (e.clientX - this._panStartX) / this.zoom;
+      this.panY = this._panBaseY + (e.clientY - this._panStartY) / this.zoom;
+    },
+    onPanEnd() {
+      this._panning = false;
+    },
+  };
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+
+</body>
+</html>
