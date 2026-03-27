@@ -102,7 +102,7 @@ button.sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
       <div class="drop-zone" x-show="!svgUrl" :class="{dragover}" @click="$refs.fileInput.click()">
         <div style="font-size:2rem;margin-bottom:0.5rem">&#x1F95A;</div>
         <div>Drop SVG here or click to browse</div>
-        <div style="margin-top:0.25rem;font-size:0.75rem">6400 &times; 1400 recommended</div>
+        <div style="margin-top:0.25rem;font-size:0.75rem">3200 &times; 700 recommended</div>
       </div>
     </div>
     <input type="file" accept=".svg" x-ref="fileInput" @change="loadFile($event)" hidden>
@@ -856,8 +856,8 @@ function eggduino() {
     paths: [],
     pathCount: 0,
     segmentCount: 0,
-    scaledW: 6400,
-    scaledH: 1400,
+    scaledW: 3200,
+    scaledH: 700,
 
     // Settings
     s: {
@@ -870,8 +870,8 @@ function eggduino() {
       smoothness: 0.5,
       reversePen: false,
       reverseRot: false,
-      pageWidth: 6400,
-      pageHeight: 1400,
+      pageWidth: 3200,
+      pageHeight: 700,
     },
 
     // Plotting
@@ -896,7 +896,7 @@ function eggduino() {
     jogUnit: 'deg',
     jogSteps: 100,
     jogDeg: 5,
-    stepsPerRev: 6400,
+    stepsPerRev: 3200,
     dragover: false,
     logLines: [],
 

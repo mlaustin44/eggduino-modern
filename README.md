@@ -75,7 +75,7 @@ GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o eggduino-linux   ./cmd/eg
 EggDuino accepts standard SVG files. The SVG is automatically scaled to fit the machine's drawing area, so any dimensions work, but keep the following in mind:
 
 - **Vector paths only.** Raster images, embedded bitmaps, and text elements are ignored. Convert text to paths in your editor before exporting (in Inkscape: Path > Object to Path).
-- **Recommended canvas size:** 6400 x 1400 pixels matches the default machine dimensions (6400 steps for one full egg rotation at 32x microstepping, 1400 steps of pen travel). SVGs with other aspect ratios are scaled uniformly to fit.
+- **Recommended canvas size:** 3200 x 700 pixels matches the default machine dimensions (3200 steps for one full egg rotation, 700 steps of pen travel). SVGs with other aspect ratios are scaled uniformly to fit.
 - **Supported elements:** `<path>`, `<rect>`, `<circle>`, `<ellipse>`, `<line>`, `<polyline>`, `<polygon>`. Groups (`<g>`) and transforms are handled correctly.
 - **Stroke, not fill.** The plotter traces paths -- it does not fill shapes. Design your artwork as outlines/strokes. If your SVG uses filled shapes, the plotter will trace their outlines.
 - **Simplify where possible.** Fewer and simpler paths plot faster. Use your editor's "Simplify" or "Reduce nodes" feature to eliminate unnecessary detail, especially on curves that were converted from raster traces.

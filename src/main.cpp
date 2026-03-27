@@ -52,9 +52,8 @@
 
 // ---- Pen axis travel limits (steps from zero) ----
 // Set to 0 to disable limits
-// At 32x microstepping: 6400 steps/rev, pen travel ~1400 steps total
-#define PEN_LIMIT_NEG -600
-#define PEN_LIMIT_POS  800
+#define PEN_LIMIT_NEG -300
+#define PEN_LIMIT_POS  400
 
 // ---- EEPROM addresses for pen servo positions ----
 #define PEN_UP_EE_ADDR   ((uint16_t *)0)
