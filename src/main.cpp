@@ -43,15 +43,18 @@
 #define SERVO_PIN     12
 
 // ---- Microstepping config ----
-// Must match jumper settings on CNC Shield v3 (M0/M1/M2 under drivers)
-// Only 1, 2, 4, 8, 16 allowed (integer math constraint)
+// Hardware is TMC2209 at 32x microstepping (no jumpers = 8, MS1 only = 32).
+// EBB protocol sends coordinates in 16th-microstep units.
+// Set these to 16 so coordinates pass through 1:1; the web app compensates
+// by using 6400 steps/rev (200 * 32) for page width.
 #define ROT_MICROSTEP 16
 #define PEN_MICROSTEP 16
 
 // ---- Pen axis travel limits (steps from zero) ----
 // Set to 0 to disable limits
-#define PEN_LIMIT_NEG -300
-#define PEN_LIMIT_POS  400
+// At 32x microstepping: 6400 steps/rev, pen travel ~1400 steps total
+#define PEN_LIMIT_NEG -600
+#define PEN_LIMIT_POS  800
 
 // ---- EEPROM addresses for pen servo positions ----
 #define PEN_UP_EE_ADDR   ((uint16_t *)0)

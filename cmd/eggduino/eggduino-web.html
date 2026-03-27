@@ -102,7 +102,7 @@ button.sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
       <div class="drop-zone" x-show="!svgUrl" :class="{dragover}" @click="$refs.fileInput.click()">
         <div style="font-size:2rem;margin-bottom:0.5rem">&#x1F95A;</div>
         <div>Drop SVG here or click to browse</div>
-        <div style="margin-top:0.25rem;font-size:0.75rem">3200 &times; 700 recommended</div>
+        <div style="margin-top:0.25rem;font-size:0.75rem">6400 &times; 1400 recommended</div>
       </div>
     </div>
     <input type="file" accept=".svg" x-ref="fileInput" @change="loadFile($event)" hidden>
@@ -207,9 +207,17 @@ button.sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
       </div>
 
       <div class="section-title">Jog</div>
-      <div class="field">
+      <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem">
+        <button class="sm" :class="{primary: jogUnit==='steps'}" @click="jogUnit='steps'">Steps</button>
+        <button class="sm" :class="{primary: jogUnit==='deg'}" @click="jogUnit='deg'">Degrees</button>
+      </div>
+      <div class="field" x-show="jogUnit==='steps'">
         <label>Step size <span class="val" x-text="jogSteps"></span></label>
-        <input type="range" min="10" max="500" step="10" x-model.number="jogSteps">
+        <input type="range" min="10" max="1000" step="10" x-model.number="jogSteps">
+      </div>
+      <div class="field" x-show="jogUnit==='deg'">
+        <label>Degrees <span class="val" x-text="jogDeg + '°'"></span></label>
+        <input type="range" min="1" max="90" step="1" x-model.number="jogDeg">
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.3rem;max-width:200px;margin:0 auto">
         <div></div>
@@ -848,8 +856,8 @@ function eggduino() {
     paths: [],
     pathCount: 0,
     segmentCount: 0,
-    scaledW: 3200,
-    scaledH: 700,
+    scaledW: 6400,
+    scaledH: 1400,
 
     // Settings
     s: {
@@ -862,8 +870,8 @@ function eggduino() {
       smoothness: 0.5,
       reversePen: false,
       reverseRot: false,
-      pageWidth: 3200,
-      pageHeight: 700,
+      pageWidth: 6400,
+      pageHeight: 1400,
     },
 
     // Plotting
@@ -885,7 +893,10 @@ function eggduino() {
 
     // UI
     tab: 'settings',
+    jogUnit: 'deg',
     jogSteps: 100,
+    jogDeg: 5,
+    stepsPerRev: 6400,
     dragover: false,
     logLines: [],
 
@@ -1040,7 +1051,12 @@ function eggduino() {
     async jog(dx, dy) {
       try {
         await _ebb.enableMotors();
-        const steps = this.jogSteps;
+        let steps;
+        if (this.jogUnit === 'deg') {
+          steps = Math.round(this.stepsPerRev * this.jogDeg / 360);
+        } else {
+          steps = this.jogSteps;
+        }
         const dur = Math.max(1, Math.ceil(1000 * steps / this.s.travelSpeed));
         const revP = this.s.reversePen ? -1 : 1;
         const revR = this.s.reverseRot ? -1 : 1;
