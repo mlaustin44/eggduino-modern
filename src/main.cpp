@@ -50,14 +50,15 @@
 #define ROT_MICROSTEP 16
 #define PEN_MICROSTEP 16
 
-// ---- Pen axis travel limits (steps from zero) ----
-// Set to 0 to disable limits
-#define PEN_LIMIT_NEG -300
-#define PEN_LIMIT_POS  400
+// ---- Pen axis travel limits defaults (steps from zero) ----
+#define DEFAULT_PEN_LIMIT_NEG -400
+#define DEFAULT_PEN_LIMIT_POS  200
 
-// ---- EEPROM addresses for pen servo positions ----
-#define PEN_UP_EE_ADDR   ((uint16_t *)0)
-#define PEN_DOWN_EE_ADDR ((uint16_t *)2)
+// ---- EEPROM addresses ----
+#define PEN_UP_EE_ADDR       ((uint16_t *)0)
+#define PEN_DOWN_EE_ADDR     ((uint16_t *)2)
+#define PEN_LIMIT_NEG_ADDR   ((int16_t *)4)
+#define PEN_LIMIT_POS_ADDR   ((int16_t *)6)
 
 // ---- Optional buttons (uncomment to enable) ----
 // #define PRG_BUTTON_PIN        2  // would conflict with ROT_STEP on CNC shield!
@@ -100,6 +101,9 @@ uint32_t nodeCount = 0;
 unsigned int layer = 0;
 boolean prgButtonState = 0;
 boolean motorsEnabled = 0;
+boolean limitsEnabled = 1;
+int penLimitNeg = DEFAULT_PEN_LIMIT_NEG;
+int penLimitPos = DEFAULT_PEN_LIMIT_POS;
 
 const uint8_t rotStepCorrection = 16 / ROT_MICROSTEP;
 const uint8_t penStepCorrection = 16 / PEN_MICROSTEP;
@@ -142,6 +146,11 @@ void setprgButtonState();
 void queryDebug();
 void setHome();
 void goHome();
+void setLimits();
+void setPenLimits();
+void loadPenLimitsFromEE();
+void storePenLimitsInEE();
+void queryPenLimits();
 
 // ==========================================================================
 // Setup & Loop
@@ -192,6 +201,9 @@ void makeComInterface() {
   SCmd.addCommand("QD", queryDebug);
   SCmd.addCommand("HM", setHome);   // Set current position as zero
   SCmd.addCommand("GH", goHome);    // Return to zero position
+  SCmd.addCommand("TL", setLimits); // Toggle/set pen limits
+  SCmd.addCommand("PL", setPenLimits); // Set pen limit values
+  SCmd.addCommand("QT", queryPenLimits); // Query pen travel limits
   SCmd.setDefaultHandler(unrecognized);
 }
 
@@ -280,6 +292,8 @@ void stepperMove() {
 }
 
 void setPen() {
+  moveToDestination();  // wait for any in-progress move before changing pen
+
   char *arg = SCmd.next();
   if (arg == NULL) {
     sendError();
@@ -410,6 +424,7 @@ void unrecognized(const char *command) {
 
 void initHardware() {
   loadPenPosFromEE();
+  loadPenLimitsFromEE();
 
   // CNC Shield v3: single enable pin for all axes
   pinMode(ENABLE_PIN, OUTPUT);
@@ -499,19 +514,17 @@ void prepareMove(uint16_t duration, int penStepsEBB, int rotStepsEBB) {
     motorsOn();
   }
 
-  // Clamp pen axis to physical limits
-  #if PEN_LIMIT_NEG != 0 || PEN_LIMIT_POS != 0
-  {
+  // Clamp pen axis to physical limits (if enabled)
+  if (limitsEnabled && penLimitNeg != penLimitPos) {
     long targetPos = penMotor.currentPosition() + (long)penStepsEBB;
-    if (targetPos < PEN_LIMIT_NEG) {
-      penStepsEBB = PEN_LIMIT_NEG - penMotor.currentPosition();
-      Serial.print("DBG PEN CLAMPED to neg limit\r\n");
-    } else if (targetPos > PEN_LIMIT_POS) {
-      penStepsEBB = PEN_LIMIT_POS - penMotor.currentPosition();
-      Serial.print("DBG PEN CLAMPED to pos limit\r\n");
+    if (targetPos < penLimitNeg) {
+      penStepsEBB = penLimitNeg - penMotor.currentPosition();
+      Serial.print("DBG PEN CLAMPED to min\r\n");
+    } else if (targetPos > penLimitPos) {
+      penStepsEBB = penLimitPos - penMotor.currentPosition();
+      Serial.print("DBG PEN CLAMPED to max\r\n");
     }
   }
-  #endif
 
   Serial.print("DBG SM dur=");
   Serial.print(duration);
@@ -569,6 +582,68 @@ void setprgButtonState() {
   prgButtonState = 1;
 }
 
+void queryPenLimits() {
+  Serial.print(String(penLimitNeg) + "," + String(penLimitPos) + "\r\n");
+  sendAck();
+}
+
+void loadPenLimitsFromEE() {
+  int16_t neg = (int16_t)eeprom_read_word((const uint16_t *)PEN_LIMIT_NEG_ADDR);
+  int16_t pos = (int16_t)eeprom_read_word((const uint16_t *)PEN_LIMIT_POS_ADDR);
+  // Validate: neg < pos, range between 100 and 20000 steps.
+  // Otherwise treat as uninitialized/corrupt and write defaults.
+  if (neg < pos && (pos - neg) >= 100 && (pos - neg) <= 20000 &&
+      neg > -10000 && pos < 10000) {
+    penLimitNeg = neg;
+    penLimitPos = pos;
+  } else {
+    // EEPROM is uninitialized or corrupt — write defaults
+    penLimitNeg = DEFAULT_PEN_LIMIT_NEG;
+    penLimitPos = DEFAULT_PEN_LIMIT_POS;
+    storePenLimitsInEE();
+  }
+}
+
+void storePenLimitsInEE() {
+  eeprom_update_word((uint16_t *)PEN_LIMIT_NEG_ADDR, (uint16_t)penLimitNeg);
+  eeprom_update_word((uint16_t *)PEN_LIMIT_POS_ADDR, (uint16_t)penLimitPos);
+}
+
+// PL,a,b — set pen limits in steps and store to EEPROM
+// Values are sorted so penLimitNeg <= penLimitPos regardless of input order
+void setPenLimits() {
+  char *arg1 = SCmd.next();
+  char *arg2 = SCmd.next();
+  if (arg1 != NULL && arg2 != NULL) {
+    int a = atoi(arg1);
+    int b = atoi(arg2);
+    penLimitNeg = min(a, b);
+    penLimitPos = max(a, b);
+    storePenLimitsInEE();
+    Serial.print("DBG limits set min=");
+    Serial.print(penLimitNeg);
+    Serial.print(" max=");
+    Serial.print(penLimitPos);
+    Serial.print("\r\n");
+    sendAck();
+  } else {
+    sendError();
+  }
+}
+
+void setLimits() {
+  char *arg = SCmd.next();
+  if (arg != NULL) {
+    limitsEnabled = atoi(arg) ? 1 : 0;
+    Serial.print("DBG limits ");
+    Serial.print(limitsEnabled ? "ON" : "OFF");
+    Serial.print("\r\n");
+    sendAck();
+  } else {
+    sendError();
+  }
+}
+
 void setHome() {
   moveToDestination();
   rotMotor.setCurrentPosition(0);
@@ -606,6 +681,12 @@ void queryDebug() {
   Serial.print(rotMotor.currentPosition());
   Serial.print(" penPos=");
   Serial.print(penMotor.currentPosition());
+  Serial.print(" limits=");
+  Serial.print(limitsEnabled ? "ON" : "OFF");
+  Serial.print(" penLimNeg=");
+  Serial.print(penLimitNeg);
+  Serial.print(" penLimPos=");
+  Serial.print(penLimitPos);
   Serial.print("\r\n");
   sendAck();
 }
