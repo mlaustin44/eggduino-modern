@@ -1,2 +1,6 @@
 .pio/
 /eggduino
+*.log
+*.png
+eggduino-mock*
+/references/
