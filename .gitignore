@@ -1,5 +1,6 @@
 .pio/
 /eggduino
+/dist/
 *.log
 *.png
 eggduino-mock*

@@ -1,0 +1,66 @@
+version: "3"
+
+vars:
+  GO_LDFLAGS: "-s -w"
+  GO_PKG: "./cmd/eggduino/"
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+
+  firmware:build:
+    desc: Build the Arduino firmware
+    cmds:
+      - pio run
+
+  firmware:flash:
+    desc: Build and flash firmware to Arduino
+    cmds:
+      - pio run -t upload
+
+  firmware:monitor:
+    desc: Open serial monitor
+    cmds:
+      - pio device monitor
+
+  app:build:
+    desc: Build the Go desktop app
+    sources:
+      - eggduino-web.html
+      - cmd/eggduino/*.go
+    generates:
+      - eggduino
+    cmds:
+      - cp eggduino-web.html cmd/eggduino/eggduino-web.html
+      - go build -ldflags="{{.GO_LDFLAGS}}" -o eggduino {{.GO_PKG}}
+
+  app:run:
+    desc: Build and run the desktop app
+    deps: [app:build]
+    cmds:
+      - ./eggduino
+
+  app:mock:
+    desc: Build and run in mock mode (no hardware)
+    deps: [app:build]
+    cmds:
+      - ./eggduino -mock
+
+  app:release:
+    desc: Cross-compile for all platforms
+    cmds:
+      - cp eggduino-web.html cmd/eggduino/eggduino-web.html
+      - GOOS=linux   GOARCH=amd64 go build -ldflags="{{.GO_LDFLAGS}}" -o dist/eggduino-linux-amd64       {{.GO_PKG}}
+      - GOOS=linux   GOARCH=arm64 go build -ldflags="{{.GO_LDFLAGS}}" -o dist/eggduino-linux-arm64       {{.GO_PKG}}
+      - GOOS=darwin  GOARCH=amd64 go build -ldflags="{{.GO_LDFLAGS}}" -o dist/eggduino-macos-amd64       {{.GO_PKG}}
+      - GOOS=darwin  GOARCH=arm64 go build -ldflags="{{.GO_LDFLAGS}}" -o dist/eggduino-macos-arm64       {{.GO_PKG}}
+      - GOOS=windows GOARCH=amd64 go build -ldflags="{{.GO_LDFLAGS}} -H windowsgui" -o dist/eggduino-windows-amd64.exe {{.GO_PKG}}
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -f eggduino
+      - rm -rf dist/
+      - rm -rf .pio/build/
