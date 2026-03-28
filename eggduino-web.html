@@ -210,15 +210,15 @@ button.sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
         <label>Degrees <span class="val" x-text="jogDeg + '°'"></span></label>
         <input type="range" min="1" max="90" step="1" x-model.number="jogDeg">
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.3rem;max-width:200px;margin:0 auto">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.3rem;max-width:240px;margin:0 auto">
         <div></div>
-        <button @click="jog(0,-1)" :disabled="!connected" class="sm">&uarr; Y</button>
+        <button @click="jog(0,-1)" :disabled="!connected" class="sm">&uarr; Egg (Y)</button>
         <div></div>
-        <button @click="jog(-1,0)" :disabled="!connected" class="sm">&larr; X</button>
+        <button @click="jog(-1,0)" :disabled="!connected" class="sm">&larr; Pen (X)</button>
         <div></div>
-        <button @click="jog(1,0)" :disabled="!connected" class="sm">X &rarr;</button>
+        <button @click="jog(1,0)" :disabled="!connected" class="sm">Pen (X) &rarr;</button>
         <div></div>
-        <button @click="jog(0,1)" :disabled="!connected" class="sm">Y &darr;</button>
+        <button @click="jog(0,1)" :disabled="!connected" class="sm">Egg (Y) &darr;</button>
         <div></div>
       </div>
       <div x-show="connected" style="text-align:center;font-size:0.7rem;color:#94a3b8;margin-top:0.5rem;font-family:monospace;font-variant-numeric:tabular-nums">
