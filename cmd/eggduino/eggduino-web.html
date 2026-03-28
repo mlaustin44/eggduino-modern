@@ -86,6 +86,7 @@ button.sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
     <span class="version" x-text="version"></span>
     <span class="status-dot" :class="{on: connected}"></span>
     <button @click="connected ? disconnect() : connect()" :class="connected ? '' : 'primary'" x-text="connected ? 'Disconnect' : 'Connect'" :disabled="connecting"></button>
+    <button class="danger sm" @click="quit()" style="margin-left:0.5rem">Quit</button>
   </div>
 </header>
 
@@ -899,6 +900,15 @@ function eggduino() {
       this.connected = false;
       _ebb = null;
       this.version = '';
+    },
+
+    async quit() {
+      if (this.connected) await this.disconnect();
+      try {
+        const ws = new WebSocket(`ws://${location.host}/ws`);
+        ws.onopen = () => { ws.send(JSON.stringify({action: 'quit'})); ws.close(); };
+      } catch(e) {}
+      document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#94a3b8">EggDuino server stopped. You can close this tab.</div>';
     },
 
     // ── SVG Loading ──

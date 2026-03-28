@@ -715,6 +715,16 @@ func wsHandler(be Backend, plotter *Plotter, mock bool) http.HandlerFunc {
 				plotter.Stop()
 				resp.OK = true
 
+			case "quit":
+				log.Println("Quit requested from web UI")
+				if plotter.IsRunning() {
+					plotter.Stop()
+				}
+				be.Disconnect()
+				resp.OK = true
+				writeJSON(resp)
+				os.Exit(0)
+
 			default:
 				resp.Error = "unknown action: " + msg.Action
 			}
