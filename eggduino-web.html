@@ -88,7 +88,7 @@ button.sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
 <main>
   <!-- Preview -->
   <div class="preview-pane">
-    <div class="preview-wrap" :style="'background:'+previewBg+';aspect-ratio:'+scaledW+'/'+scaledH"
+    <div class="preview-wrap" :style="'background:'+previewBg+';aspect-ratio:'+canvasW+'/'+canvasH"
          @wheel.prevent="onZoom($event)"
          @mousedown.prevent="onPanStart($event)"
          @mousemove.prevent="onPanMove($event)"
@@ -102,12 +102,15 @@ button.sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
       <div class="drop-zone" x-show="!svgUrl" :class="{dragover}" @click="$refs.fileInput.click()">
         <div style="font-size:2rem;margin-bottom:0.5rem">&#x1F95A;</div>
         <div>Drop SVG here or click to browse</div>
-        <div style="margin-top:0.25rem;font-size:0.75rem">3200 &times; 700 recommended</div>
+        <div style="margin-top:0.25rem;font-size:0.75rem" x-text="canvasW + ' × ' + canvasH + ' recommended'"></div>
       </div>
     </div>
     <input type="file" accept=".svg" x-ref="fileInput" @change="loadFile($event)" hidden>
-    <div class="preview-info" x-show="pathCount > 0">
-      <span x-text="pathCount + ' paths, ' + segmentCount + ' segments'"></span>
+    <div class="preview-info">
+      <span x-text="'Canvas: ' + canvasW + ' × ' + canvasH + ' (hw pen: ' + penLimits.neg + ' to ' + penLimits.pos + ')'"></span>
+      <template x-if="pathCount > 0">
+        <span x-text="' — ' + pathCount + ' paths, ' + segmentCount + ' segments'"></span>
+      </template>
       <span x-show="fileName" x-text="' — ' + fileName"></span>
     </div>
   </div>
@@ -170,18 +173,6 @@ button.sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
         <label for="revRot">Reverse rotation motor</label>
       </div>
 
-      <div class="section-title">Page (steps)</div>
-      <div class="field-row">
-        <div class="field">
-          <label>Width</label>
-          <input type="number" min="100" max="10000" x-model.number="s.pageWidth">
-        </div>
-        <div class="field">
-          <label>Height</label>
-          <input type="number" min="100" max="10000" x-model.number="s.pageHeight">
-        </div>
-      </div>
-
       <div class="section-title">Preview</div>
       <div class="field">
         <label>Background color</label>
@@ -230,6 +221,25 @@ button.sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
         <button @click="jog(0,1)" :disabled="!connected" class="sm">Y &darr;</button>
         <div></div>
       </div>
+      <div x-show="connected" style="text-align:center;font-size:0.7rem;color:#94a3b8;margin-top:0.5rem;font-family:monospace;font-variant-numeric:tabular-nums">
+        Pen: <span x-text="jogPos.pen"></span> &nbsp; Rot: <span x-text="jogPos.rot"></span>
+      </div>
+      <div class="checkbox-field" style="margin-top:0.5rem">
+        <input type="checkbox" id="ignoreLimits" x-model="ignoreLimits">
+        <label for="ignoreLimits">Ignore pen limits when jogging</label>
+      </div>
+
+      <div class="section-title" style="margin-top:1rem">Pen Limits</div>
+      <div style="font-size:0.7rem;color:#64748b;margin-bottom:0.5rem">
+        Jog pen to each limit with limits disabled, then click the buttons to capture.
+      </div>
+      <div class="manual-grid">
+        <button @click="setPenLimit('neg')" :disabled="!connected" class="sm">Set Left Limit Here</button>
+        <button @click="setPenLimit('pos')" :disabled="!connected" class="sm">Set Right Limit Here</button>
+      </div>
+      <div x-show="connected" style="text-align:center;font-size:0.7rem;color:#94a3b8;margin-top:0.25rem;font-family:monospace">
+        Limits: <span x-text="penLimits.neg"></span> to <span x-text="penLimits.pos"></span>
+      </div>
 
       <div class="section-title" style="margin-top:1rem">Home / Zero</div>
       <div class="manual-grid">
@@ -260,10 +270,10 @@ button.sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
     <button class="primary" @click="startPlot()" :disabled="!canPlot">Plot</button>
   </template>
   <template x-if="plotting && !paused">
-    <button @click="paused=true">Pause</button>
+    <button @click="pausePlot()">Pause</button>
   </template>
   <template x-if="plotting && paused">
-    <button class="success" @click="paused=false">Resume</button>
+    <button class="success" @click="resumePlot()">Resume</button>
   </template>
   <template x-if="plotting">
     <button class="danger" @click="stopPlot()">Stop</button>
@@ -643,6 +653,7 @@ class EBB {
   #ws = null;
   #logFn = null;
   #pending = null;
+  #onProgress = null;
 
   constructor(logFn) { this.#logFn = logFn || (() => {}); }
 
@@ -658,6 +669,11 @@ class EBB {
 
     this.#ws.onmessage = (ev) => {
       const msg = JSON.parse(ev.data);
+      // Progress updates from plot come asynchronously
+      if (msg.action === 'progress' && this.#onProgress) {
+        this.#onProgress(msg);
+        return;
+      }
       if (this.#pending) {
         const p = this.#pending;
         this.#pending = null;
@@ -734,105 +750,27 @@ class EBB {
     rotSteps = Math.round(rotSteps);
     await this.command(`SM,${duration},${penSteps},${rotSteps}`);
   }
+
+  async optimizePaths(paths) {
+    const wirePaths = paths.map(p => p.map(pt => [pt.x, pt.y]));
+    const resp = await this.#request({action: 'optimize', paths: wirePaths});
+    return (resp.paths || []).map(p => p.map(pt => ({x: pt[0], y: pt[1]})));
+  }
+
+  async startPlot(paths, settings, onProgress) {
+    const wirePaths = paths.map(p => p.map(pt => [pt.x, pt.y]));
+    this.#onProgress = onProgress;
+    const resp = await this.#request({action: 'plot', paths: wirePaths, settings});
+    return resp;
+  }
+
+  async pausePlot()  { await this.#request({action: 'pause'}); }
+  async resumePlot() { await this.#request({action: 'resume'}); }
+  async stopPlot()   { await this.#request({action: 'stop'}); }
 }
 
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-// ═══════════════════════════════════════════════════════════════════
-//  PLOTTER
-// ═══════════════════════════════════════════════════════════════════
-
-async function plot(paths, settings, scaledH, ebb, callbacks) {
-  const {onProgress, onPosition, isPaused, isStopped} = callbacks;
-  // Count total segments: drawing segments + 1 travel per path + 1 return home
-  const drawSegs = paths.reduce((s, p) => s + Math.max(0, p.length - 1), 0);
-  const totalSegs = drawSegs + paths.length + 1; // +travel per path +return home
-  let doneSeg = 0;
-  let curX = 0, curY = 0;
-  let penIsUp = true;
-
-  const revP = settings.reversePen ? -1 : 1;
-  const revR = settings.reverseRot ? -1 : 1;
-
-  async function moveTo(x, y, speed) {
-    const dx = x - curX, dy = y - curY;
-    const dist = Math.hypot(dx, dy);
-    if (dist < 0.5) { curX = x; curY = y; onPosition(curX, curY); return; }
-    const dur = Math.max(1, Math.ceil(1000 * dist / speed));
-    // SM,duration,penSteps(Y),rotSteps(X)
-    await ebb.stepperMove(dur, Math.round(dy * revP), Math.round(dx * revR));
-    // Pace: sleep for most of the move duration to let firmware catch up
-    if (dur > 50) await sleep(dur - 50);
-    curX = x; curY = y;
-    onPosition(curX, curY);
-  }
-
-  async function doPenUp() {
-    if (!penIsUp) {
-      await ebb.penUp(settings.penUpDelay);
-      penIsUp = true;
-    }
-  }
-
-  async function doPenDown() {
-    if (penIsUp) {
-      await ebb.penDown(settings.penDownDelay);
-      penIsUp = false;
-    }
-  }
-
-  // Center the pen axis around zero.
-  // SVG coordinates go 0→pageHeight, but zero is at the center of physical travel.
-  // Offset Y by -pageHeight/2 so drawing spans -half to +half.
-  const yOffset = scaledH / 2;
-  for (const polyline of paths) {
-    for (const pt of polyline) {
-      pt.y -= yOffset;
-    }
-  }
-
-  // Configure servo positions
-  await ebb.configServo(settings.penUpDeg, settings.penDownDeg);
-  await ebb.enableMotors();
-  await doPenUp();
-
-  for (const polyline of paths) {
-    if (isStopped()) break;
-    while (isPaused()) { await sleep(100); if (isStopped()) break; }
-    if (isStopped()) break;
-
-    // Travel to start of this polyline
-    const start = polyline[0];
-    const travelDist = Math.hypot(start.x - curX, start.y - curY);
-    if (travelDist > 1) {
-      await doPenUp();
-      await moveTo(start.x, start.y, settings.travelSpeed);
-    }
-    doneSeg++;
-    onProgress(totalSegs > 0 ? (doneSeg / totalSegs) * 100 : 0);
-
-    // Draw the polyline
-    await doPenDown();
-    for (let i = 1; i < polyline.length; i++) {
-      if (isStopped()) break;
-      while (isPaused()) { await sleep(100); if (isStopped()) break; }
-      if (isStopped()) break;
-
-      await moveTo(polyline[i].x, polyline[i].y, settings.drawSpeed);
-      doneSeg++;
-      onProgress(totalSegs > 0 ? (doneSeg / totalSegs) * 100 : 100);
-    }
-  }
-
-  // Finish up
-  await doPenUp();
-  if (curX !== 0 || curY !== 0) {
-    await moveTo(0, 0, settings.travelSpeed);
-  }
-  doneSeg++;
-  onProgress(100);
-  await ebb.disableMotors();
-}
+// Plot execution is handled entirely by the Go backend.
+// The browser just sends paths + settings and receives progress updates.
 
 // ═══════════════════════════════════════════════════════════════════
 //  ALPINE.JS APPLICATION
@@ -856,8 +794,11 @@ function eggduino() {
     paths: [],
     pathCount: 0,
     segmentCount: 0,
+    // Standard eggbot canvas (user-facing, for SVGs and preview)
+    canvasW: 3200,
+    canvasH: 800,
     scaledW: 3200,
-    scaledH: 700,
+    scaledH: 800,
 
     // Settings
     s: {
@@ -870,8 +811,6 @@ function eggduino() {
       smoothness: 0.5,
       reversePen: false,
       reverseRot: false,
-      pageWidth: 3200,
-      pageHeight: 700,
     },
 
     // Plotting
@@ -897,6 +836,9 @@ function eggduino() {
     jogSteps: 100,
     jogDeg: 5,
     stepsPerRev: 3200,
+    ignoreLimits: false,
+    jogPos: {pen: 0, rot: 0},
+    penLimits: {neg: -400, pos: 200},
     dragover: false,
     logLines: [],
 
@@ -925,6 +867,17 @@ function eggduino() {
       try {
         _ebb = new EBB((type, text) => this.log(type, text));
         this.version = await _ebb.connect();
+        // Query pen limits from firmware EEPROM (hardware step range)
+        try {
+          const limStr = await _ebb.query('QT');
+          const parts = limStr.split(',').map(Number);
+          if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+            const lo = Math.min(parts[0], parts[1]);
+            const hi = Math.max(parts[0], parts[1]);
+            this.penLimits = {neg: lo, pos: hi};
+            this.log('rx', `Pen limits: ${lo} to ${hi} (${hi - lo} steps travel)`);
+          }
+        } catch(e) { /* old firmware without QT — use defaults */ }
         this.connected = true;
       } catch(e) {
         this.log('err', e.message);
@@ -969,21 +922,21 @@ function eggduino() {
       if (!this.svgText) return;
       const {paths, w, h} = extractPaths(this.svgText, this.s.smoothness);
 
-      // Scale from SVG coords to egg step coords
-      const scaleX = this.s.pageWidth / w;
-      const scaleY = this.s.pageHeight / h;
-      const scale = Math.min(scaleX, scaleY);
+      // Scale SVG to standard eggbot canvas (3200x800).
+      // Hardware step mapping happens later in the plot function.
+      const scaleX = this.canvasW / w;
+      const scaleY = this.canvasH / h;
 
       for (const poly of paths) {
         for (const pt of poly) {
-          pt.x *= scale;
-          pt.y *= scale;
+          pt.x *= scaleX;
+          pt.y *= scaleY;
         }
       }
 
       this.paths = paths;
-      this.scaledW = w * scale;
-      this.scaledH = h * scale;
+      this.scaledW = this.canvasW;
+      this.scaledH = this.canvasH;
       this.pathCount = paths.length;
       this.segmentCount = paths.reduce((s, p) => s + Math.max(0, p.length - 1), 0);
     },
@@ -992,37 +945,45 @@ function eggduino() {
 
     async startPlot() {
       if (!this.canPlot) return;
-      // Re-extract with current smoothness
       this.reprocessSVG();
 
       this.plotting = true;
       this.paused = false;
-      this.stopped = false;
       this.progress = 0;
 
       try {
-        await plot(this.paths, this.s, this.scaledH, _ebb, {
-          onProgress: (p) => { this.progress = p; },
-          onPosition: (x, y) => {
-            // x = rotation steps, y = pen steps (centered, so -scaledH/2 to +scaledH/2)
-            const wrappedX = ((x % this.scaledW) + this.scaledW) % this.scaledW;
-            this.dotX = (wrappedX / this.scaledW) * 100;
-            this.dotY = ((y + this.scaledH / 2) / this.scaledH) * 100;
-          },
-          isPaused: () => this.paused,
-          isStopped: () => this.stopped,
+        await _ebb.startPlot(this.paths, this.s, (msg) => {
+          if (msg.progress != null) this.progress = msg.progress;
+          if (msg.posX != null && msg.posY != null) {
+            const wrappedX = ((msg.posX % this.canvasW) + this.canvasW) % this.canvasW;
+            this.dotX = (wrappedX / this.canvasW) * 100;
+            this.dotY = ((msg.posY + this.canvasH / 2) / this.canvasH) * 100;
+          }
+          if (msg.error) {
+            this.log('err', msg.error);
+            this.plotting = false;
+          }
+          if (msg.progress >= 100) {
+            this.plotting = false;
+            this.paused = false;
+          }
         });
       } catch(e) {
         this.log('err', 'Plot error: ' + e.message);
+        this.plotting = false;
       }
-
-      this.plotting = false;
-      this.paused = false;
     },
 
-    stopPlot() {
-      this.stopped = true;
-      this.paused = false;
+    async pausePlot() {
+      try { await _ebb.pausePlot(); this.paused = true; } catch(e) { this.log('err', e.message); }
+    },
+
+    async resumePlot() {
+      try { await _ebb.resumePlot(); this.paused = false; } catch(e) { this.log('err', e.message); }
+    },
+
+    async stopPlot() {
+      try { await _ebb.stopPlot(); this.plotting = false; this.paused = false; } catch(e) { this.log('err', e.message); }
     },
 
     // ── Manual Controls ──
@@ -1051,16 +1012,20 @@ function eggduino() {
     async jog(dx, dy) {
       try {
         await _ebb.enableMotors();
+        await _ebb.command('TL,' + (this.ignoreLimits ? '0' : '1'));
         let steps;
         if (this.jogUnit === 'deg') {
           steps = Math.round(this.stepsPerRev * this.jogDeg / 360);
         } else {
           steps = this.jogSteps;
         }
+        const penSteps = Math.round(dy * steps * (this.s.reversePen ? -1 : 1));
+        const rotSteps = Math.round(dx * steps * (this.s.reverseRot ? -1 : 1));
+
         const dur = Math.max(1, Math.ceil(1000 * steps / this.s.travelSpeed));
-        const revP = this.s.reversePen ? -1 : 1;
-        const revR = this.s.reverseRot ? -1 : 1;
-        await _ebb.stepperMove(dur, Math.round(dy * steps * revP), Math.round(dx * steps * revR));
+        await _ebb.stepperMove(dur, penSteps, rotSteps);
+        this.jogPos.pen += penSteps;
+        this.jogPos.rot += rotSteps;
       } catch(e) { this.log('err', e.message); }
     },
 
@@ -1071,9 +1036,26 @@ function eggduino() {
       } catch(e) { this.log('err', e.message); }
     },
 
+    async setPenLimit(side) {
+      try {
+        if (side === 'neg') {
+          this.penLimits.neg = this.jogPos.pen;
+        } else {
+          this.penLimits.pos = this.jogPos.pen;
+        }
+        const lo = Math.min(this.penLimits.neg, this.penLimits.pos);
+        const hi = Math.max(this.penLimits.neg, this.penLimits.pos);
+        await _ebb.command(`PL,${lo},${hi}`);
+        this.penLimits = {neg: lo, pos: hi};
+        this.log('rx', `Pen limits saved: ${lo} to ${hi} (${hi - lo} steps travel)`);
+      } catch(e) { this.log('err', e.message); }
+    },
+
     async setHome() {
       try {
         await _ebb.command('HM');
+        this.jogPos = {pen: 0, rot: 0};
+        this.penLimits = {neg: -400, pos: 200}; // reset display; firmware resets relative to new zero
         this.log('rx', 'Zero position set');
       } catch(e) { this.log('err', e.message); }
     },
