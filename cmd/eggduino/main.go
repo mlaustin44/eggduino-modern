@@ -715,16 +715,6 @@ func wsHandler(be Backend, plotter *Plotter, mock bool) http.HandlerFunc {
 				plotter.Stop()
 				resp.OK = true
 
-			case "quit":
-				log.Println("Quit requested from web UI")
-				if plotter.IsRunning() {
-					plotter.Stop()
-				}
-				be.Disconnect()
-				resp.OK = true
-				writeJSON(resp)
-				os.Exit(0)
-
 			default:
 				resp.Error = "unknown action: " + msg.Action
 			}
@@ -811,6 +801,21 @@ func main() {
 	})
 	plt := NewPlotter()
 	http.HandleFunc("/ws", wsHandler(be, plt, *mockFlag))
+	http.HandleFunc("/quit", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.Error(w, "POST only", 405)
+			return
+		}
+		log.Println("Quit requested from web UI")
+		w.WriteHeader(200)
+		go func() {
+			if plt.IsRunning() {
+				plt.Stop()
+			}
+			be.Disconnect()
+			os.Exit(0)
+		}()
+	})
 
 	url := "http://" + addr
 
