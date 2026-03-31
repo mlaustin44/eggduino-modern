@@ -494,12 +494,25 @@ func findArduino() string {
 	if err != nil {
 		return ""
 	}
+	// On macOS, skip /dev/tty.* ports — they can hang on open waiting for
+	// carrier detect. The /dev/cu.* variant of the same device works fine.
+	filtered := ports[:0:0]
+	for _, p := range ports {
+		if !strings.HasPrefix(p, "/dev/tty.") {
+			filtered = append(filtered, p)
+		}
+	}
+	if len(filtered) > 0 {
+		ports = filtered
+	}
+	// Priority 1: ACM (Linux) or usbmodem (macOS genuine Arduino)
 	for _, p := range ports {
 		lower := strings.ToLower(p)
 		if strings.Contains(lower, "acm") || strings.Contains(lower, "usbmodem") {
 			return p
 		}
 	}
+	// Priority 2: any USB/serial device (CH340 clones, FTDI, CP2102, etc.)
 	for _, p := range ports {
 		lower := strings.ToLower(p)
 		if strings.Contains(lower, "usb") || strings.Contains(lower, "serial") {
